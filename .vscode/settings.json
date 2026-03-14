@@ -1,0 +1,14 @@
+{
+  "mcp": {
+    "servers": {
+      "evepi-server": {
+        "type": "stdio",
+        "command": "${workspaceFolder}/target/release/evepi-server",
+        "env": {
+          "EVE_CLIENT_ID": "${env:EVE_CLIENT_ID}",
+          "EVE_HOME_SYSTEM_ID": "${env:EVE_HOME_SYSTEM_ID}"
+        }
+      }
+    }
+  }
+}
