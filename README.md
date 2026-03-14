@@ -71,7 +71,7 @@ cargo test             # unit tests
 ### 1. Create an EVE developer application
 
 1. Go to [developers.eveonline.com](https://developers.eveonline.com) → **Manage Applications → Create New Application**.
-2. Set the callback URL to `http://localhost:8765/callback` (or any local address you prefer).
+2. Set the callback URL to `http://localhost:7878/callback`.
 3. Add the following scopes:
    - `esi-planets.manage_planets.v1`
    - `esi-location.read_location.v1`
@@ -89,19 +89,29 @@ Add this to your shell profile (`~/.bashrc`, `~/.profile`, etc.) or to `.env` in
 
 > **WSL users:** Add to `~/.bashrc` inside WSL. The MCP server inherits the environment VS Code passes to its terminal, so make sure VS Code is started from a shell where these are set.
 
-### 3. Authenticate characters
+### 3. Enrol characters
 
-Character authentication is not yet exposed as an MCP tool (planned for a future phase). In the meantime, tokens can be inserted directly into the token store for testing. Each character needs an entry keyed `eve_char_<character_id>` containing:
+Run the `enroll` subcommand once per character. It spins up a local HTTP listener on port 7878 and guides you through the EVE SSO flow in your browser.
 
-```json
-{
-  "access_token": "...",
-  "refresh_token": "...",
-  "expires_at": 1234567890
-}
+```bash
+# Build first (or use `cargo run --`)
+cargo build --release
+
+# Enrol a character; prompted for an account label interactively
+EVE_CLIENT_ID="your_eve_client_id" ./target/release/evepi-server enroll
+
+# Or supply the account label up front
+EVE_CLIENT_ID="your_eve_client_id" ./target/release/evepi-server enroll --account "Main Account"
 ```
 
-The token store tries the OS keychain first (Windows Credential Manager, macOS Keychain) then falls back to `~/.config/evepi/tokens.age` (age-encrypted file — implementation in progress).
+The command will:
+1. Print an EVE SSO authorization URL — open it in your browser.
+2. Log in with the EVE character you want to add, and click **Authorize**.
+3. The browser redirects to `http://localhost:7878/callback`; the server captures the code automatically.
+4. Ask for an account label (press Enter to default to the character name).
+5. Persist the character + tokens and print a confirmation.
+
+Repeat for each character. The token store tries the OS keychain first (Windows Credential Manager, macOS Keychain) and falls back to `~/.config/evepi/tokens.age` for environments without a secret service daemon (e.g. WSL).
 
 ---
 
