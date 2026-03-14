@@ -7,7 +7,6 @@ use sha2::{Digest, Sha256};
 pub const EVE_SCOPES: &[&str] = &[
     "esi-planets.manage_planets.v1",
     "esi-location.read_location.v1",
-    "esi-corporations.read_customs_offices.v1",
 ];
 
 const EVE_AUTH_URL: &str = "https://login.eveonline.com/v2/oauth/authorize";

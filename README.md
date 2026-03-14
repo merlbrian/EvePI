@@ -75,7 +75,6 @@ cargo test             # unit tests
 3. Add the following scopes:
    - `esi-planets.manage_planets.v1`
    - `esi-location.read_location.v1`
-   - `esi-corporations.read_customs_offices.v1`
 4. Note the **Client ID**.
 
 ### 2. Set environment variables
