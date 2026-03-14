@@ -24,11 +24,20 @@ pub struct EvepiService {
     pub db: Db,
     pub esi: EsiClient,
     pub store: TokenStore,
+    /// Optional home solar system ID, read from `EVE_HOME_SYSTEM_ID`.
+    /// Used as a fallback when a character's current location is unknown
+    /// (i.e. `sync_characters` has not been run yet for that character).
+    pub home_system_id: Option<i64>,
 }
 
 impl EvepiService {
-    pub fn new(db: Db, esi: EsiClient, store: TokenStore) -> Self {
-        Self { db, esi, store }
+    pub fn new(db: Db, esi: EsiClient, store: TokenStore, home_system_id: Option<i64>) -> Self {
+        Self {
+            db,
+            esi,
+            store,
+            home_system_id,
+        }
     }
 }
 

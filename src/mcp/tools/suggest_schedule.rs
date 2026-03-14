@@ -54,7 +54,9 @@ pub async fn handle(svc: &EvepiService, character_id: Option<i64>) -> anyhow::Re
             let soonest_expiry: Option<String> = r.try_get("soonest_expiry")?;
             let tax_rate: Option<f64> = r.try_get("tax_rate")?;
 
-            let in_system = current_system_id == Some(solar_system_id);
+            // Fall back to home_system_id when ESI location hasn't been synced yet.
+            let effective_system = current_system_id.or(svc.home_system_id);
+            let in_system = effective_system == Some(solar_system_id);
             let label = format!(
                 "{} {}",
                 planet_type,

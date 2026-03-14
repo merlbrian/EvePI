@@ -54,7 +54,9 @@ pub async fn handle(
             let expiry_time: Option<String> = r.try_get("expiry_time")?;
             let install_time: Option<String> = r.try_get("install_time")?;
 
-            let travel_needed = current_system_id != Some(solar_system_id);
+            // Fall back to home_system_id when ESI location hasn't been synced yet.
+            let effective_system = current_system_id.or(svc.home_system_id);
+            let travel_needed = effective_system != Some(solar_system_id);
             let label = format!(
                 "{} {}",
                 planet_type,

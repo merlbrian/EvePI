@@ -19,7 +19,11 @@ pub async fn serve() -> anyhow::Result<()> {
     let esi = EsiClient::new().context("failed to create ESI client")?;
     let store = TokenStore::new().context("failed to open token store")?;
 
-    let service = tools::EvepiService::new(db, esi, store);
+    let home_system_id = std::env::var("EVE_HOME_SYSTEM_ID")
+        .ok()
+        .and_then(|v| v.parse::<i64>().ok());
+
+    let service = tools::EvepiService::new(db, esi, store, home_system_id);
 
     let transport = stdio();
     service
