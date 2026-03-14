@@ -45,6 +45,9 @@ tokio-stream = "0.1"
 futures-util = "0.3"
 urlencoding = "2"
 
+# CLI argument parsing
+clap = { version = "4", features = ["derive"] }
+
 [dev-dependencies]
 tokio-test = "0.4"
 
