@@ -5,7 +5,7 @@ use std::sync::atomic::{AtomicI64, Ordering};
 
 use super::models::{
     EsiCharacterLocation, EsiColony, EsiColonyLayout, EsiCustomsOffice, EsiSchematic,
-    EsiSolarSystem,
+    EsiSolarSystem, EsiType,
 };
 
 const ESI_BASE: &str = "https://esi.evetech.net/latest";
@@ -92,6 +92,16 @@ impl EsiClient {
         let url = format!("{ESI_BASE}/universe/schematics/{schematic_id}/");
         let resp = self.get(&url).await?;
         resp.json().await.context("get_schematic parse failed")
+    }
+
+    /// `GET /universe/types/{type_id}/`
+    ///
+    /// Returns only `type_id` and `name`; the full ESI response contains many
+    /// more fields that are silently ignored by `EsiType`.
+    pub async fn get_type_name(&self, type_id: i64) -> anyhow::Result<EsiType> {
+        let url = format!("{ESI_BASE}/universe/types/{type_id}/");
+        let resp = self.get(&url).await?;
+        resp.json().await.context("get_type_name parse failed")
     }
 
     /// `GET /corporations/{corporation_id}/customs_offices/`

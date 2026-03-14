@@ -93,7 +93,6 @@ pub struct EsiSolarSystem {
 
 #[derive(Debug, Deserialize)]
 pub struct EsiSchematic {
-    pub schematic_id: Option<u32>,
     pub schematic_name: String,
     pub cycle_time: u32,
     pub pins: Vec<EsiSchematicPin>,
@@ -104,6 +103,14 @@ pub struct EsiSchematicPin {
     pub type_id: i64,
     pub quantity: u32,
     pub is_input: bool,
+}
+
+/// Minimal type info — only `type_id` and `name` are needed; other fields
+/// returned by ESI are intentionally ignored.
+#[derive(Debug, Deserialize)]
+pub struct EsiType {
+    pub type_id: i64,
+    pub name: String,
 }
 
 // ---------------------------------------------------------------------------
