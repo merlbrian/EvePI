@@ -19,9 +19,6 @@ pub async fn handle(svc: &EvepiService) -> anyhow::Result<Value> {
         .collect::<Result<_, _>>()
         .context("failed to read character_id column")?;
 
-    let client_id =
-        std::env::var("EVE_CLIENT_ID").context("EVE_CLIENT_ID environment variable not set")?;
-
     let mut synced = 0usize;
     let mut errors: Vec<String> = Vec::new();
 
@@ -39,7 +36,7 @@ pub async fn handle(svc: &EvepiService) -> anyhow::Result<Value> {
         let access_token = if token_entry.expires_at < chrono::Utc::now().timestamp() + 300 {
             match crate::auth::eve_sso::refresh_eve_token(
                 svc.esi.http_client(),
-                &client_id,
+                &svc.client_id,
                 &token_entry.refresh_token,
             )
             .await

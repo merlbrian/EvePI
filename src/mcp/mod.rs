@@ -18,12 +18,15 @@ pub async fn serve() -> anyhow::Result<()> {
     let db = Db::open().await.context("failed to open database")?;
     let esi = EsiClient::new().context("failed to create ESI client")?;
     let store = TokenStore::new().context("failed to open token store")?;
+    let client_id = std::env::var("EVE_CLIENT_ID").context(
+        "EVE_CLIENT_ID environment variable not set; configure it in .vscode/mcp.json or your shell before starting the MCP server",
+    )?;
 
     let home_system_id = std::env::var("EVE_HOME_SYSTEM_ID")
         .ok()
         .and_then(|v| v.parse::<i64>().ok());
 
-    let service = tools::EvepiService::new(db, esi, store, home_system_id);
+    let service = tools::EvepiService::new(db, esi, store, client_id, home_system_id);
 
     let transport = stdio();
     service

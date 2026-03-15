@@ -76,6 +76,7 @@ pub struct EvepiService {
     pub db: Db,
     pub esi: EsiClient,
     pub store: TokenStore,
+    pub client_id: String,
     /// Optional home solar system ID, read from `EVE_HOME_SYSTEM_ID`.
     /// Used as a fallback when a character's current location is unknown
     /// (i.e. `sync_characters` has not been run yet for that character).
@@ -84,11 +85,18 @@ pub struct EvepiService {
 }
 
 impl EvepiService {
-    pub fn new(db: Db, esi: EsiClient, store: TokenStore, home_system_id: Option<i64>) -> Self {
+    pub fn new(
+        db: Db,
+        esi: EsiClient,
+        store: TokenStore,
+        client_id: String,
+        home_system_id: Option<i64>,
+    ) -> Self {
         Self {
             db,
             esi,
             store,
+            client_id,
             home_system_id,
             tool_router: Self::tool_router(),
         }
@@ -169,7 +177,10 @@ impl EvepiService {
     #[tool(description = "Manually set the POCO tax rate (0.0-1.0) for a planet. Defaults to 0.0.")]
     async fn set_poco_tax(
         &self,
-        Parameters(SetPocoTaxParams { planet_id, tax_rate }): Parameters<SetPocoTaxParams>,
+        Parameters(SetPocoTaxParams {
+            planet_id,
+            tax_rate,
+        }): Parameters<SetPocoTaxParams>,
     ) -> String {
         match set_poco_tax::handle(self, planet_id, tax_rate).await {
             Ok(v) => v.to_string(),
@@ -197,7 +208,8 @@ impl EvepiService {
 #[tool_handler]
 impl ServerHandler for EvepiService {
     fn get_info(&self) -> ServerInfo {
-        ServerInfo::new(ServerCapabilities::builder().enable_tools().build())
-            .with_server_info(Implementation::new("evepi-server", env!("CARGO_PKG_VERSION")))
+        ServerInfo::new(ServerCapabilities::builder().enable_tools().build()).with_server_info(
+            Implementation::new("evepi-server", env!("CARGO_PKG_VERSION")),
+        )
     }
 }

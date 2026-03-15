@@ -52,19 +52,25 @@ impl TokenStore {
     /// the encrypted file.
     pub fn save(&self, key: &str, entry: &TokenEntry) -> anyhow::Result<()> {
         let json = serde_json::to_string(entry)?;
-        if self.try_keychain_save(key, &json).is_ok() {
-            return Ok(());
+        match self.try_keychain_save(key, &json) {
+            Ok(()) => Ok(()),
+            Err(keychain_error) => self.file_save(key, &json).context(format!(
+                "keyring storage failed ({keychain_error}); age-encrypted fallback is not implemented yet"
+            )),
         }
-        self.file_save(key, &json)
     }
 
     /// Retrieve a token entry by `key`.
     pub fn load(&self, key: &str) -> anyhow::Result<TokenEntry> {
-        if let Ok(json) = self.try_keychain_load(key) {
-            return Ok(serde_json::from_str(&json)?);
+        match self.try_keychain_load(key) {
+            Ok(json) => Ok(serde_json::from_str(&json)?),
+            Err(keychain_error) => {
+                let json = self.file_load(key).context(format!(
+                    "keyring storage failed ({keychain_error}); age-encrypted fallback is not implemented yet"
+                ))?;
+                Ok(serde_json::from_str(&json)?)
+            }
         }
-        let json = self.file_load(key)?;
-        Ok(serde_json::from_str(&json)?)
     }
 
     /// Remove a token entry (e.g., on logout).

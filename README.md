@@ -8,11 +8,14 @@ A Rust MCP server that exposes EVE Online Planetary Interaction (PI) data as too
 - [Prerequisites](#prerequisites)
 - [Building](#building)
 - [First-Time Setup](#first-time-setup)
-- [Running the MCP Server](#running-the-mcp-server)
+- [GitHub Authentication](#github-authentication)
+- [Running the MCP Server in VS Code](#running-the-mcp-server-in-vs-code)
+- [Verifying MCP in VS Code](#verifying-mcp-in-vs-code)
 - [VS Code Copilot Agents](#vs-code-copilot-agents)
 - [MCP Tools Reference](#mcp-tools-reference)
 - [Project Structure](#project-structure)
 - [Development](#development)
+- [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -84,13 +87,15 @@ export EVE_CLIENT_ID="your_eve_client_id"
 export EVE_HOME_SYSTEM_ID="31002229"   # your wormhole system ID (optional but recommended)
 ```
 
-Add this to your shell profile (`~/.bashrc`, `~/.profile`, etc.) or to `.env` in the repo root (it is gitignored).
+`EVE_CLIENT_ID` is required for both `enroll` and the MCP server itself. `EVE_HOME_SYSTEM_ID` is optional, but recommended so `travel_needed` is still meaningful before the first sync.
 
-> **WSL users:** Add to `~/.bashrc` inside WSL. The MCP server inherits the environment VS Code passes to its terminal, so make sure VS Code is started from a shell where these are set.
+The binary does **not** load `.env` files by itself. Set these in your shell profile (`~/.bashrc`, `~/.profile`, etc.), load them via a tool like `direnv`, or pass them explicitly in `.vscode/mcp.json`.
+
+> **WSL users:** Add them inside WSL, not Windows PowerShell. VS Code launches the MCP server with the environment it sees at startup.
 
 ### 3. Enrol characters
 
-Run the `enroll` subcommand once per character. It spins up a local HTTP listener on port 7878 and guides you through the EVE SSO flow in your browser.
+Run the `enroll` subcommand once per character. It spins up a local HTTP listener on port `7878` and guides you through the EVE SSO flow in your browser, so make sure that port is free first.
 
 ```bash
 # Build first (or use `cargo run --`)
@@ -110,37 +115,93 @@ The command will:
 4. Ask for an account label (press Enter to default to the character name).
 5. Persist the character + tokens and print a confirmation.
 
-Repeat for each character. The token store tries the OS keychain first (Windows Credential Manager, macOS Keychain) and falls back to `~/.config/evepi/tokens.age` for environments without a secret service daemon (e.g. WSL).
+Repeat for each character.
+
+> **Current token-storage limitation:** EvePI stores tokens in the OS keychain when one is available. The documented `~/.config/evepi/tokens.age` fallback is not implemented yet, so on WSL/Linux you need a working secret service/keychain for enrolment to succeed.
 
 ---
 
-## Running the MCP Server
+## GitHub Authentication
 
-The server is designed to be launched by VS Code, not run directly. Configure it in `.vscode/settings.json`:
+GitHub auth is optional and only needed for the `analyse_colony` tool. If you skip this step, the MCP server still works; only AI-assisted colony analysis is unavailable.
+
+### 1. Create a GitHub OAuth app
+
+1. Go to [github.com/settings/developers](https://github.com/settings/developers) → **New OAuth App**.
+2. Set the callback URL to `http://localhost:7879/callback`.
+3. Note the **Client ID** and **Client Secret**.
+
+### 2. Set GitHub environment variables
+
+```bash
+export GITHUB_CLIENT_ID="your_github_client_id"
+export GITHUB_CLIENT_SECRET="your_github_client_secret"
+```
+
+### 3. Run the GitHub auth flow
+
+The command starts a local listener on port `7879`, so that port must be free.
+
+```bash
+./target/release/evepi-server github-auth
+```
+
+The command will print a GitHub authorization URL, wait for the callback, then store the resulting token under the fixed key `github_token`.
+
+---
+
+## Running the MCP Server in VS Code
+
+The server is designed to be launched by VS Code over stdio, not run manually in a terminal. Configure it in `.vscode/mcp.json`:
 
 ```json
 {
-  "mcp": {
-    "servers": {
-      "evepi-server": {
-        "type": "stdio",
-        "command": "${workspaceFolder}/target/release/evepi-server",
-        "env": {
-          "EVE_CLIENT_ID": "${env:EVE_CLIENT_ID}"
-        }
+  "servers": {
+    "evepi-server": {
+      "type": "stdio",
+      "command": "${workspaceFolder}/target/release/evepi-server",
+      "autoStart": true,
+      "env": {
+        "EVE_CLIENT_ID": "${env:EVE_CLIENT_ID}",
+        "EVE_HOME_SYSTEM_ID": "${env:EVE_HOME_SYSTEM_ID}"
       }
     }
   }
 }
 ```
 
-After saving, VS Code will offer to **Start** the server. Once running, the `evepi-server` tools become available to all Copilot agents.
+Recommended workflow:
 
-To verify it's working, open a Copilot chat and type:
+1. Build the binary first:
 
-```
+   ```bash
+   cargo build --release
+   ```
+
+2. Save the `.vscode/mcp.json` file shown above.
+3. Open the repository in VS Code with GitHub Copilot enabled.
+4. Let VS Code auto-start the MCP server, or start/restart it from VS Code's MCP UI if needed.
+5. Rebuild with `cargo build --release` any time you change Rust code, then restart the MCP server so VS Code picks up the new binary.
+
+If VS Code does not inherit your shell environment, replace the `${env:...}` placeholders with literal values temporarily or restart VS Code from a shell where the variables are already exported.
+
+## Verifying MCP in VS Code
+
+Once the server is running, verify it from Copilot chat before relying on the bundled agents.
+
+Good smoke tests:
+
+```text
+#evepi-server sync my characters and list my colonies
 @pi-ops what needs doing?
+@pi-analyst analyse the full P1→P2 supply chain for Gemma
 ```
+
+Expected behavior:
+
+1. `#evepi-server` prompts should return tool-backed data instead of configuration errors.
+2. `@pi-ops` should call `sync_characters`, then summarize urgent resets.
+3. `@pi-analyst` should be able to inspect colony layouts; `analyse_colony` will only work after `github-auth`.
 
 ---
 
@@ -185,6 +246,8 @@ The agent will:
 ### GitHub Copilot AI analysis
 
 The `analyse_colony` tool sends colony data to the GitHub Copilot chat completions API for deeper AI analysis. This requires a GitHub token with the `copilot` scope, stored under the key `github_token` in the token store.
+
+Run `./target/release/evepi-server github-auth` first if you want this tool to work.
 
 > **Important:** AI analysis is always explicit and user-initiated. The server never calls the Copilot API automatically or on a background schedule.
 
@@ -271,3 +334,26 @@ cargo test --features integration       # includes live ESI calls (requires auth
 3. Add a new `async fn` on `EvepiService` (inside the `#[tool(tool_box)]` impl block) that calls `my_tool::handle(self, ...)` and matches `Ok`/`Err` to a `String`.
 4. Run `cargo clippy -- -D warnings` and `cargo fmt`.
 
+---
+
+## Troubleshooting
+
+### `EVE_CLIENT_ID environment variable not set`
+
+The MCP server now checks this at startup. Set `EVE_CLIENT_ID` in your shell and/or `.vscode/mcp.json`, then restart the server from VS Code.
+
+### `failed to bind port 7878` or `failed to bind port 7879`
+
+Another process is already using the local callback port needed for `enroll` or `github-auth`. Stop the conflicting process or free the port, then rerun the command.
+
+### Token storage fails on WSL or Linux
+
+EvePI currently depends on a working OS keychain/secret-service implementation. The documented `tokens.age` fallback is not implemented yet, so enrolment will fail if `keyring` cannot store credentials.
+
+### `GitHub token not found`
+
+You tried to use `analyse_colony` before running `./target/release/evepi-server github-auth`, or the token was not stored successfully.
+
+### VS Code is still using an old binary
+
+Run `cargo build --release` again and restart the MCP server from VS Code. The server command points at `target/release/evepi-server`, so rebuilds are not picked up until you restart it.
