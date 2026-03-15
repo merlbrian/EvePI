@@ -1,0 +1,6 @@
+cat_url = "off"
+edition = "2024"
+max_width = 100
+use_small_heuristics = "Default"
+imports_granularity = "Module"
+group_imports = "StdExternalCrate"
