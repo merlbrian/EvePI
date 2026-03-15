@@ -311,4 +311,116 @@ mod tests {
         };
         assert_eq!(poco.tax_rate, 0.0);
     }
+
+    #[test]
+    fn to_roman_all() {
+        let expected = [
+            (1, "I"),
+            (2, "II"),
+            (3, "III"),
+            (4, "IV"),
+            (5, "V"),
+            (6, "VI"),
+            (7, "VII"),
+            (8, "VIII"),
+            (9, "IX"),
+            (10, "X"),
+            (11, "XI"),
+            (12, "XII"),
+        ];
+        for (n, s) in expected {
+            assert_eq!(to_roman(n), s, "to_roman({n}) should be {s}");
+        }
+        assert_eq!(to_roman(0), "?", "out-of-range should return ?");
+        assert_eq!(to_roman(13), "?", "out-of-range should return ?");
+    }
+
+    #[test]
+    fn display_label_plasma_xii() {
+        let colony = Colony {
+            character_id: 1,
+            planet_id: 3,
+            planet_type: PlanetType::Plasma,
+            planet_index: 12,
+            solar_system_id: 1,
+            upgrade_level: 5,
+            num_pins: 10,
+            last_update: chrono::Utc::now(),
+        };
+        assert_eq!(colony.display_label(), "Plasma XII");
+    }
+
+    fn make_extractor_pin(pin_id: PinId) -> Pin {
+        Pin::Extractor(ExtractorPin {
+            base: BasicPin { pin_id, type_id: 1 },
+            product_type_id: None,
+            cycle_time: None,
+            head_radius: None,
+            heads: vec![],
+            expiry_time: None,
+            install_time: None,
+        })
+    }
+
+    fn make_factory_pin(pin_id: PinId, schematic_id: Option<u32>) -> Pin {
+        Pin::Factory(FactoryPin {
+            base: BasicPin { pin_id, type_id: 2 },
+            schematic_id,
+        })
+    }
+
+    #[test]
+    fn colony_role_idle_no_pins() {
+        assert_eq!(ColonyRole::from_pins(&[]), ColonyRole::Idle);
+    }
+
+    #[test]
+    fn colony_role_idle_launchpad_only() {
+        let pins = vec![Pin::Launchpad(BasicPin {
+            pin_id: 1,
+            type_id: 3,
+        })];
+        assert_eq!(ColonyRole::from_pins(&pins), ColonyRole::Idle);
+    }
+
+    #[test]
+    fn colony_role_extractor() {
+        let pins = vec![make_extractor_pin(1), make_extractor_pin(2)];
+        assert_eq!(ColonyRole::from_pins(&pins), ColonyRole::Extractor);
+    }
+
+    #[test]
+    fn colony_role_processor() {
+        // Schematic IDs 15–25 → P2 outputs → Processor
+        let pins = vec![
+            make_extractor_pin(1),
+            make_factory_pin(2, Some(15)),
+            make_factory_pin(3, Some(20)),
+        ];
+        assert_eq!(ColonyRole::from_pins(&pins), ColonyRole::Processor);
+    }
+
+    #[test]
+    fn colony_role_advanced_processor() {
+        // Schematic ID >= 26 → P3/P4 output → AdvancedProcessor
+        let pins = vec![
+            make_factory_pin(1, Some(26)),
+            make_factory_pin(2, Some(100)),
+        ];
+        assert_eq!(ColonyRole::from_pins(&pins), ColonyRole::AdvancedProcessor);
+    }
+
+    #[test]
+    fn colony_role_advanced_takes_priority_in_mixed_batch() {
+        // If any factory has schematic_id >= 26, role is AdvancedProcessor
+        let pins = vec![make_factory_pin(1, Some(20)), make_factory_pin(2, Some(30))];
+        assert_eq!(ColonyRole::from_pins(&pins), ColonyRole::AdvancedProcessor);
+    }
+
+    #[test]
+    fn colony_role_factories_without_schematic_are_processor() {
+        // schematic_id = None → treated as P1→P2 (doesn't trigger advanced path)
+        let pins = vec![make_factory_pin(1, None)];
+        assert_eq!(ColonyRole::from_pins(&pins), ColonyRole::Processor);
+    }
 }

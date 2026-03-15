@@ -13,7 +13,7 @@ pub mod eve_sso;
 mod github_oauth;
 pub mod store;
 
-pub use enroll::run_enroll;
+pub use enroll::{run_enroll, run_github_auth};
 pub use eve_sso::{EveAuthSession, begin_eve_auth, complete_eve_auth, refresh_eve_token};
 pub use github_oauth::{begin_github_auth, complete_github_auth};
 pub use store::{TokenStore, TokenStoreError};

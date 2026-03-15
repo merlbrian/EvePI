@@ -12,7 +12,10 @@ mod pi;
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
-#[command(name = "evepi-server", about = "EvePI MCP server and character management")]
+#[command(
+    name = "evepi-server",
+    about = "EvePI MCP server and character management"
+)]
 struct Cli {
     #[command(subcommand)]
     command: Option<Command>,
@@ -28,6 +31,8 @@ enum Command {
         #[arg(short, long)]
         account: Option<String>,
     },
+    /// Authenticate with GitHub to enable Copilot-powered analysis
+    GithubAuth,
 }
 
 #[tokio::main]
@@ -36,5 +41,6 @@ async fn main() -> anyhow::Result<()> {
     match cli.command.unwrap_or(Command::Serve) {
         Command::Serve => mcp::serve().await,
         Command::Enroll { account } => auth::run_enroll(account).await,
+        Command::GithubAuth => auth::run_github_auth().await,
     }
 }

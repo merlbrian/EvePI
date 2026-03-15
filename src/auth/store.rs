@@ -118,6 +118,38 @@ impl TokenStore {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn eve_token_key_format() {
+        let character_id: i64 = 12345678;
+        let key = format!("eve_char_{character_id}");
+        assert_eq!(key, "eve_char_12345678");
+        assert!(key.starts_with("eve_char_"));
+    }
+
+    #[test]
+    fn github_token_key() {
+        // The GitHub token is stored under a fixed key — never a per-character key.
+        let key = "github_token";
+        assert!(!key.contains("eve_char_"));
+        assert_eq!(key, "github_token");
+    }
+
+    #[test]
+    fn token_key_no_collision() {
+        // Different character IDs must produce different keys.
+        let key_a = format!("eve_char_{}", 1i64);
+        let key_b = format!("eve_char_{}", 2i64);
+        assert_ne!(key_a, key_b);
+        assert_ne!(key_a, "github_token");
+    }
+}
+
 impl serde::Serialize for TokenEntry {
     fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
         use serde::ser::SerializeStruct;

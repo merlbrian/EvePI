@@ -9,10 +9,11 @@ use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 use crate::auth::store::TokenStore;
-use crate::auth::{begin_eve_auth, complete_eve_auth};
+use crate::auth::{begin_eve_auth, begin_github_auth, complete_eve_auth, complete_github_auth};
 use crate::db::Db;
 
 const REDIRECT_URI: &str = "http://localhost:7878/callback";
+const GITHUB_REDIRECT_URI: &str = "http://localhost:7879/callback";
 
 /// Run the interactive character enrolment flow.
 ///
@@ -86,12 +87,11 @@ pub async fn run_enroll(account_label: Option<String>) -> anyhow::Result<()> {
         .await
         .context("upsert account")?;
 
-    let account_id: i64 =
-        sqlx::query_scalar("SELECT account_id FROM accounts WHERE label = ?1")
-            .bind(&label)
-            .fetch_one(db.pool())
-            .await
-            .context("fetch account_id")?;
+    let account_id: i64 = sqlx::query_scalar("SELECT account_id FROM accounts WHERE label = ?1")
+        .bind(&label)
+        .fetch_one(db.pool())
+        .await
+        .context("fetch account_id")?;
 
     sqlx::query(
         "INSERT INTO characters (character_id, account_id, character_name)
@@ -119,15 +119,83 @@ pub async fn run_enroll(account_label: Option<String>) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Run the interactive GitHub OAuth flow to enrol a GitHub token for Copilot
+/// analysis features.
+///
+/// Spins up a local HTTP listener on port 7879, prints the GitHub OAuth URL,
+/// waits for the browser redirect, exchanges the code for a token, and
+/// persists it to the token store under the key `"github_token"`.
+pub async fn run_github_auth() -> anyhow::Result<()> {
+    let client_id = std::env::var("GITHUB_CLIENT_ID")
+        .context("GITHUB_CLIENT_ID environment variable not set")?;
+    let client_secret = std::env::var("GITHUB_CLIENT_SECRET")
+        .context("GITHUB_CLIENT_SECRET environment variable not set")?;
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:7879")
+        .await
+        .context("failed to bind port 7879 — is another process using it?")?;
+
+    let (url, session) = begin_github_auth(&client_id, GITHUB_REDIRECT_URI);
+
+    println!("Open this URL in your browser to authorise GitHub access:\n");
+    println!("  {url}\n");
+    println!("Waiting for the OAuth callback on http://localhost:7879/callback …");
+
+    let (mut stream, _) = listener
+        .accept()
+        .await
+        .context("failed to accept OAuth callback connection")?;
+
+    let mut buf = vec![0u8; 4096];
+    let n = stream
+        .read(&mut buf)
+        .await
+        .context("failed to read callback request")?;
+    let raw = std::str::from_utf8(&buf[..n]).context("callback request was not valid UTF-8")?;
+
+    let html = b"HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\n\r\n\
+        <!doctype html><html><body>\
+        <h1>GitHub Authorised!</h1>\
+        <p>You can close this tab and return to the terminal.</p>\
+        </body></html>";
+    stream
+        .write_all(html)
+        .await
+        .context("failed to write callback response")?;
+    drop(stream);
+    drop(listener);
+
+    let (code, state) = parse_callback(raw)?;
+    if state != session.state {
+        anyhow::bail!("OAuth state mismatch — possible CSRF; aborting GitHub auth");
+    }
+
+    let http = reqwest::Client::new();
+    let access_token = complete_github_auth(&http, &client_id, &client_secret, &code, session)
+        .await
+        .context("GitHub OAuth token exchange failed")?;
+
+    // Store as a simple TokenEntry (expires_at irrelevant; GitHub tokens don't expire by default).
+    let entry = crate::auth::store::TokenEntry {
+        access_token: access_token.clone(),
+        refresh_token: String::new(),
+        expires_at: i64::MAX,
+    };
+    let store = TokenStore::new().context("failed to open token store")?;
+    store
+        .save("github_token", &entry)
+        .context("failed to save GitHub token")?;
+
+    println!("\n✓  GitHub token saved. Copilot analysis features are now enabled.");
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
 /// Prompt for an account label if none was supplied on the CLI.
-async fn resolve_label(
-    supplied: Option<String>,
-    character_name: &str,
-) -> anyhow::Result<String> {
+async fn resolve_label(supplied: Option<String>, character_name: &str) -> anyhow::Result<String> {
     if let Some(label) = supplied {
         return Ok(label);
     }
@@ -156,7 +224,10 @@ async fn resolve_label(
 /// not verified — the token was received directly from the EVE SSO token
 /// endpoint over TLS, so origin trust is already established.
 fn decode_eve_jwt(token: &str) -> anyhow::Result<(i64, String)> {
-    let payload_b64 = token.split('.').nth(1).context("JWT has no payload segment")?;
+    let payload_b64 = token
+        .split('.')
+        .nth(1)
+        .context("JWT has no payload segment")?;
     let payload_bytes = URL_SAFE_NO_PAD
         .decode(payload_b64)
         .context("JWT payload base64 decode failed")?;
@@ -197,7 +268,11 @@ fn parse_callback(request: &str) -> anyhow::Result<(String, String)> {
     let mut state = None;
     for param in query.split('&') {
         if let Some(v) = param.strip_prefix("code=") {
-            code = Some(urlencoding::decode(v).context("decode `code`")?.into_owned());
+            code = Some(
+                urlencoding::decode(v)
+                    .context("decode `code`")?
+                    .into_owned(),
+            );
         } else if let Some(v) = param.strip_prefix("state=") {
             state = Some(
                 urlencoding::decode(v)
