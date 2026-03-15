@@ -5,6 +5,7 @@ mod get_colony_layout;
 mod get_expiring_programs;
 mod list_colonies;
 mod set_poco_tax;
+mod start_eve_auth;
 mod suggest_schedule;
 mod sync_characters;
 
@@ -16,11 +17,19 @@ use rmcp::{
 };
 use serde::Deserialize;
 
+use crate::auth::CallbackServer;
 use crate::auth::TokenStore;
 use crate::db::Db;
 use crate::esi::EsiClient;
 
 // --- Parameter structs ---
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+struct StartEveAuthParams {
+    /// Optional account label to group this character under (e.g. "main", "alt1").
+    /// If omitted the character stands alone with no account grouping.
+    account: Option<String>,
+}
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 struct ListColoniesParams {
@@ -81,6 +90,7 @@ pub struct EvepiService {
     /// Used as a fallback when a character's current location is unknown
     /// (i.e. `sync_characters` has not been run yet for that character).
     pub home_system_id: Option<i64>,
+    pub callback_server: CallbackServer,
     tool_router: ToolRouter<Self>,
 }
 
@@ -98,6 +108,7 @@ impl EvepiService {
             store,
             client_id,
             home_system_id,
+            callback_server: CallbackServer::new(),
             tool_router: Self::tool_router(),
         }
     }
@@ -105,6 +116,22 @@ impl EvepiService {
 
 #[tool_router]
 impl EvepiService {
+    #[tool(
+        description = "Start an EVE SSO login flow. Returns a URL to open in your browser. \
+                       Once the browser shows the success page the character is enrolled. \
+                       Pass an optional account label to group characters together. \
+                       Afterwards run sync_characters to pull colony data."
+    )]
+    async fn start_eve_auth(
+        &self,
+        Parameters(StartEveAuthParams { account }): Parameters<StartEveAuthParams>,
+    ) -> String {
+        match start_eve_auth::handle(self, account).await {
+            Ok(msg) => msg,
+            Err(e) => format!("{{\"error\": \"{e}\"}}"),
+        }
+    }
+
     #[tool(
         description = "Sync PI data from ESI for all enrolled characters. Call this first to get fresh data."
     )]

@@ -84,7 +84,7 @@ cargo test             # unit tests
 
 ```bash
 export EVE_CLIENT_ID="your_eve_client_id"
-export EVE_HOME_SYSTEM_ID="31002229"   # your wormhole system ID (optional but recommended)
+export EVE_HOME_SYSTEM_ID="31000001"   # your wormhole system ID (optional but recommended)
 ```
 
 `EVE_CLIENT_ID` is required for both `enroll` and the MCP server itself. `EVE_HOME_SYSTEM_ID` is optional, but recommended so `travel_needed` is still meaningful before the first sync.
@@ -95,10 +95,17 @@ The binary does **not** load `.env` files by itself. Set these in your shell pro
 
 ### 3. Enrol characters
 
-Run the `enroll` subcommand once per character. It spins up a local HTTP listener on port `7878` and guides you through the EVE SSO flow in your browser, so make sure that port is free first.
+**Preferred method — from Copilot chat (once the MCP server is running):**
+
+```text
+#evepi-server start_eve_auth
+```
+
+The tool returns an EVE SSO URL. Open it in your browser, authorise the character, and the server catches the callback automatically on port `7878`. Run `sync_characters` afterwards to pull colony data. Repeat for each character, optionally passing an `account` label to group characters together.
+
+**Alternative — CLI `enroll` subcommand (pre-MCP-server setup):**
 
 ```bash
-# Build first (or use `cargo run --`)
 cargo build --release
 
 # Enrol a character; prompted for an account label interactively
@@ -108,16 +115,7 @@ EVE_CLIENT_ID="your_eve_client_id" ./target/release/evepi-server enroll
 EVE_CLIENT_ID="your_eve_client_id" ./target/release/evepi-server enroll --account "Main Account"
 ```
 
-The command will:
-1. Print an EVE SSO authorization URL — open it in your browser.
-2. Log in with the EVE character you want to add, and click **Authorize**.
-3. The browser redirects to `http://localhost:7878/callback`; the server captures the code automatically.
-4. Ask for an account label (press Enter to default to the character name).
-5. Persist the character + tokens and print a confirmation.
-
-Repeat for each character.
-
-> **Current token-storage limitation:** EvePI stores tokens in the OS keychain when one is available. The documented `~/.config/evepi/tokens.age` fallback is not implemented yet, so on WSL/Linux you need a working secret service/keychain for enrolment to succeed.
+> **Token storage:** EvePI probes the OS keychain and automatically falls back to an `age`-encrypted file at `~/.config/evepi/tokens.age` when no secret service is available (the common case in WSL2).
 
 ---
 
@@ -194,7 +192,7 @@ Good smoke tests:
 ```text
 #evepi-server sync my characters and list my colonies
 @pi-ops what needs doing?
-@pi-analyst analyse the full P1→P2 supply chain for Gemma
+@pi-analyst analyse the full P1→P2 supply chain for Alice
 ```
 
 Expected behavior:
@@ -217,7 +215,7 @@ Use for the daily "what do I need to do?" workflow.
 ```
 @pi-ops what's expiring in the next 12 hours?
 @pi-ops who should reset first today?
-@pi-ops what does Rebort need to do?
+@pi-ops what does Alice need to do?
 ```
 
 The agent will:
@@ -232,8 +230,8 @@ Use for deeper analysis of why a planet is underperforming or how to improve the
 
 **Example prompts:**
 ```
-@pi-analyst why is Loywn's Lava I underperforming?
-@pi-analyst analyse the full P1→P2 supply chain for Gemma
+@pi-analyst why is Alice's Lava I underperforming?
+@pi-analyst analyse the full P1→P2 supply chain for Alice
 @pi-analyst is there a bottleneck in our P2 production?
 ```
 
@@ -259,6 +257,7 @@ All tools are callable from any Copilot agent that has `evepi-server` in its `to
 
 | Tool | Parameters | Description |
 |---|---|---|
+| `start_eve_auth` | `account?` | Starts the EVE SSO flow from chat. Returns a URL to open in your browser; the callback is caught automatically by the background server on port 7878. Pass an optional account label to group characters. Run `sync_characters` afterwards. |
 | `sync_characters` | — | Fetches fresh colony data and character locations from ESI for all enrolled characters. **Run this first** before any other tool. |
 | `list_colonies` | `character_id?`, `account_id?` | Lists all colonies with planet label (`Gas III`, `Lava I`), upgrade level, soonest extractor expiry, and `travel_needed` flag. |
 | `get_colony_layout` | `character_id`, `planet_id` | Returns the full pin/route structure for one colony. |
@@ -278,10 +277,10 @@ Planets are always identified as `{PlanetType} {RomanNumeral}` within a characte
 The home wormhole system is configurable via `EVE_HOME_SYSTEM_ID`. When set, any character whose current location is unknown (i.e. `sync_characters` has not yet been run) is assumed to be in the home system for the purposes of the travel flag. Once synced, the character's actual ESI location is used instead.
 
 ```bash
-export EVE_HOME_SYSTEM_ID=31000001   # replace with your WH system ID
+export EVE_HOME_SYSTEM_ID=31000001   # replace with your wormhole system ID
 ```
 
-To find your wormhole system ID, look it up in-game or from an [ESI universe/systems search](https://esi.evetech.net/ui/#/Universe/get_universe_systems). The ID is always a large integer (e.g. `31002229`).
+To find your wormhole system ID, look it up in-game or from an [ESI universe/systems search](https://esi.evetech.net/ui/#/Universe/get_universe_systems). The ID is always a large integer (e.g. `31000001`).
 
 ---
 
@@ -348,7 +347,7 @@ Another process is already using the local callback port needed for `enroll` or 
 
 ### Token storage fails on WSL or Linux
 
-EvePI currently depends on a working OS keychain/secret-service implementation. The documented `tokens.age` fallback is not implemented yet, so enrolment will fail if `keyring` cannot store credentials.
+EvePI probes the OS keychain at startup and automatically falls back to an `age`-encrypted file at `~/.config/evepi/tokens.age` if the keychain is not functional (common in WSL2). If you see token-storage errors, check that `~/.config/evepi/` is writable.
 
 ### `GitHub token not found`
 

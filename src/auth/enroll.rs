@@ -28,7 +28,16 @@ pub async fn run_enroll(account_label: Option<String>) -> anyhow::Result<()> {
     // Bind first so we fail fast if the port is already in use.
     let listener = tokio::net::TcpListener::bind("127.0.0.1:7878")
         .await
-        .context("failed to bind port 7878 — is another process using it?")?;
+        .map_err(|e| {
+            if e.kind() == std::io::ErrorKind::AddrInUse {
+                anyhow::anyhow!(
+                    "port 7878 is already in use — if the MCP server is running, \
+                     use the `start_eve_auth` tool from chat instead of this command"
+                )
+            } else {
+                anyhow::anyhow!("failed to bind port 7878: {e}")
+            }
+        })?;
 
     let (url, session) = begin_eve_auth(&client_id, REDIRECT_URI)?;
 
@@ -223,7 +232,7 @@ async fn resolve_label(supplied: Option<String>, character_name: &str) -> anyhow
 /// The `sub` claim has the form `"CHARACTER:EVE:12345678"`. The signature is
 /// not verified — the token was received directly from the EVE SSO token
 /// endpoint over TLS, so origin trust is already established.
-fn decode_eve_jwt(token: &str) -> anyhow::Result<(i64, String)> {
+pub(crate) fn decode_eve_jwt(token: &str) -> anyhow::Result<(i64, String)> {
     let payload_b64 = token
         .split('.')
         .nth(1)
@@ -252,7 +261,7 @@ fn decode_eve_jwt(token: &str) -> anyhow::Result<(i64, String)> {
 
 /// Parse the OAuth `code` and `state` query parameters from a raw HTTP GET
 /// request line (e.g. `GET /callback?code=abc&state=xyz HTTP/1.1`).
-fn parse_callback(request: &str) -> anyhow::Result<(String, String)> {
+pub(crate) fn parse_callback(request: &str) -> anyhow::Result<(String, String)> {
     let first_line = request.lines().next().context("empty callback request")?;
     let path = first_line
         .split_whitespace()
