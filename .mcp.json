@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "evepi-server": {
+      "type": "stdio",
+      "command": "/home/merladmin/dev/evepi/target/release/evepi-server",
+      "env": {
+        "EVE_CLIENT_ID": "75db392b1ff94550acc228e732a3c741"
+      }
+    }
+  }
+}
